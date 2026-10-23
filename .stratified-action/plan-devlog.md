@@ -1,0 +1,84 @@
+# Plan dev-log
+
+- [1792788161] **begin** — ingest
+- [1792788163] **ingest** — scope=.
+- [1792788163] **ingest** — scope -> surface-census
+- [1792788173] **ingest-aim** — vision
+- [1792788173] **ingest** — surface-census -> classify-surfaces
+- [1792788176] **ingest** — classify-surfaces -> surface-manifest
+- [1792788179] **ingest** — surface-manifest=8
+- [1792788179] **ingest** — surface-manifest -> gui-load
+- [1792788182] **ingest** — gui-load -> entry-points
+- [1792788185] **ingest** — entry-points -> resolve-affordances
+- [1792788187] **ingest** — resolve-affordances -> entry-manifest
+- [1792788192] **ingest** — entry-manifest=12
+- [1792788192] **ingest** — entry-manifest -> preconditions
+- [1792788194] **ingest** — preconditions -> trace-effect
+- [1792788199] **ingest** — entry-done=POST /v1/chat/completions (non-streaming)
+- [1792788199] **ingest** — entry-done=POST /v1/chat/completions (streaming)
+- [1792788199] **ingest** — entry-done=POST /v1/chat/completions (forced tool_choice dispatch)
+- [1792788200] **ingest** — entry-done=GET /v1/models
+- [1792788200] **ingest** — entry-done=GET /health
+- [1792788200] **ingest** — entry-done=OPTIONS * (CORS preflight)
+- [1792788200] **ingest** — entry-done=cli:fm-launch.sh [--fm-port --proxy-port --fm-bin --health-timeout]
+- [1792788200] **ingest** — entry-done=cli:node fm-proxy.js (env PROXY_PORT FM_PORT FM_BIN FM_STRIP_TEMPLATE_MARKERS CORS_ORIGIN FM_MAX_RETRIES FM_RETRY_BASE_MS FM_RETRY_CAP_MS)
+- [1792788200] **ingest** — entry-done=cli:node tools/deviation-probe.js [port]
+- [1792788201] **ingest** — entry-done=cli:node tools/wire-baseline.js <out.json>
+- [1792788201] **ingest** — entry-done=cli:python3 tools/gen-fm-docs.py [--fm --outdir]
+- [1792788201] **ingest** — entry-done=cli:node --test
+- [1792788201] **ingest** — trace-effect -> compose-stories
+- [1792788204] **ingest** — compose-stories -> omit-mechanism
+- [1792788206] **ingest** — omit-mechanism -> dedup-cluster
+- [1792788208] **ingest** — dedup-cluster -> gap-check
+- [1792788212] **ingest** — gap-check -> emit-aims
+- [1792788223] **ingest-aim** — story
+- [1792788223] **ingest-aim** — story
+- [1792788223] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788224] **ingest-aim** — story
+- [1792788225] **ingest-aim** — story
+- [1792788225] **ingest-aim** — story
+- [1792788225] **ingest-aim** — story
+- [1792788225] **ingest** — emit-aims -> lay-floor
+- [1792788230] **ingest** — lay-floor -> describe
+- [1792788280] **ingest** — describe -> components
+- [1792788291] **ingest** — components -> lift
+- [1792788323] **ingest** — lift -> challenge
+- [1792788326] **ingest** — challenge -> ascend
+- [1792788329] **ingest** — ascend -> lift
+- [1792788343] **ingest** — lift -> challenge
+- [1792788343] **ingest** — challenge -> ascend
+- [1792788346] **ingest** — ascend -> intent-sweep
+- [1792788349] **ingest** — intent-sweep -> interlink-audit
+- [1792788352] **ingest** — interlink-audit -> settle
+- [1792788434] **revise-prose** — impl-gitignore
+- [1792788444] **revise-prose** — comp-project-docs
+- [1792788444] **revise-prose** — comp-proxy-runtime
+- [1792788444] **revise-prose** — comp-upstream-audit
+- [1792788445] **revise-prose** — comp-verification
+- [1792788445] **revise-prose** — impl-agents-md
+- [1792788445] **revise-prose** — impl-docs-fm-reference-md
+- [1792788445] **revise-prose** — impl-fm-launch-sh
+- [1792788446] **revise-prose** — impl-fm-proxy-js
+- [1792788446] **revise-prose** — impl-fm-proxy-test-js
+- [1792788446] **revise-prose** — impl-license
+- [1792788446] **revise-prose** — impl-readme-md
+- [1792788447] **revise-prose** — impl-tools-deviation-probe-js
+- [1792788447] **revise-prose** — impl-tools-gen-fm-docs-py
+- [1792788447] **revise-prose** — impl-tools-test-plan-md
+- [1792788447] **revise-prose** — impl-tools-wire-baseline-js
+- [1792788448] **revise-prose** — resp-behaviour-verification
+- [1792788448] **revise-prose** — resp-browser-access
+- [1792788448] **revise-prose** — resp-error-typing-and-retry
+- [1792788448] **revise-prose** — resp-forced-tool-dispatch
+- [1792788449] **revise-prose** — resp-request-normalization
+- [1792788449] **revise-prose** — resp-response-relay
+- [1792788449] **revise-prose** — resp-schema-translation
+- [1792788449] **revise-prose** — resp-stack-lifecycle
+- [1792788450] **revise-prose** — resp-upstream-tracking
+- [1792788450] **revise-prose** — resp-user-guidance

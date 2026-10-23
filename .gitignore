@@ -9,3 +9,11 @@ tools/ask-image.sh
 .firecrawl/
 .fms/
 apple-clone/
+
+# stratified-action: config holds an API key; the rest is runtime state
+.stratified-action/config.json
+.stratified-action/*.lock
+.stratified-action/*-shm
+.stratified-action/*-wal
+.stratified-action/leases.json
+.stratified-action/pipes/
