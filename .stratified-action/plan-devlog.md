@@ -82,3 +82,12 @@
 - [1792788449] **revise-prose** — resp-stack-lifecycle
 - [1792788450] **revise-prose** — resp-upstream-tracking
 - [1792788450] **revise-prose** — resp-user-guidance
+- [1792796392] **begin** — change
+- [1792796413] **comprehend** — modify=['impl-fm-launch-sh', 'resp-stack-lifecycle']; attach=[]; impact=22 node(s)
+- [1792796413] **change** — comprehend -> plan
+- [1792796418] **set-changeplan** — 2 step(s)
+- [1792796418] **change** — plan -> walk
+- [1792796842] **change-done** — s1 — no change to resp-stack-lifecycle: its promise (env-driven ports, clean stop) is right; the launcher broke it by not exporting ports and by pkill-ing any fm serve on its port. fm_native impl-surface-serve-md: a second fm serve on a busy port prints its banner then exits 1 (Address already in use).
+- [1792796852] **retire** — impl-fm-launch-sh@v1 -> v2; reason: launcher never exported its ports to the proxy, and its cleanup pkill-ed any fm serve on the port, including one it did not start; perturbed: []
+- [1792796861] **change-done** — s2
+- [1792796861] **change** — walk -> settle

@@ -6,6 +6,157 @@
     "jeff-70319-1792788155": {
       "mode": null
     },
+    "jeff-fmfix-1761260000": {
+      "change": {
+        "comprehend": {
+          "anchors": [
+            "impl-fm-launch-sh",
+            "resp-stack-lifecycle"
+          ],
+          "attach_points": [],
+          "candidates": [
+            "impl-fm-launch-sh",
+            "resp-stack-lifecycle",
+            "impl-fm-proxy-js"
+          ],
+          "desc": "fm-launch.sh launcher: pass fm and proxy ports to the proxy, and never kill or shadow an fm serve already running on the port",
+          "done": true,
+          "impact": [
+            "comp-proxy-runtime",
+            "comp-verification",
+            "impl-fm-launch-sh",
+            "impl-fm-proxy-js",
+            "impl-fm-proxy-test-js",
+            "impl-tools-wire-baseline-js",
+            "intent-audit-each-build",
+            "intent-browser-clients",
+            "intent-chat-completion",
+            "intent-clean-content-optin",
+            "intent-forced-tool-calls",
+            "intent-run-the-stack",
+            "intent-typed-errors",
+            "intent-unmodified-schemas",
+            "resp-behaviour-verification",
+            "resp-browser-access",
+            "resp-error-typing-and-retry",
+            "resp-forced-tool-dispatch",
+            "resp-request-normalization",
+            "resp-response-relay",
+            "resp-schema-translation",
+            "resp-stack-lifecycle"
+          ],
+          "round": 1,
+          "stage": "modify"
+        },
+        "current": null,
+        "cursor": 2,
+        "done": [
+          "s1",
+          "s2"
+        ],
+        "graph_fp": {
+          "comp-project-docs": "2fbef069d680f98ee4c5b76d508169b3d301c161",
+          "comp-proxy-runtime": "a5b9c8421d85687319d6e8a2d46b6d83b56ca348",
+          "comp-upstream-audit": "c94c88eba09e159fe2b1960a1f5efe207bc475b9",
+          "comp-verification": "ec9a2fa5bb9830d25385afb8c4e4afbba3825342",
+          "impl-agents-md": "2edb7c65671c2cff8749f159bac25d4240c2f2ec",
+          "impl-docs-fm-reference-md": "57be990086859525be59f11bec43ecc1e8dae054",
+          "impl-fm-launch-sh": "47f4559954efa6643c8e19e1fff46672711d36ae",
+          "impl-fm-proxy-js": "10cd4f2a4cf26a856360ccf7d35f9b22e6d84cea",
+          "impl-fm-proxy-test-js": "5cb8106991e60a76c3bb41627416f7f46079c460",
+          "impl-gitignore": "26ccc69619ea8a3f1804172cbc2602ab76902696",
+          "impl-license": "301ddbb78b7709f476ae75c053462a859ac49deb",
+          "impl-readme-md": "f86fdd9ed2e201c61564fa0657e39cf0442082e0",
+          "impl-tools-deviation-probe-js": "3bf8fe75a3ef0125a7109a362ef51fcc613533ea",
+          "impl-tools-gen-fm-docs-py": "fba192e9e2357c193888f2660658daa0dbd6a97e",
+          "impl-tools-test-plan-md": "2950167c4036bcad3dc8a8fb9fb18edd751749f2",
+          "impl-tools-wire-baseline-js": "446fca848e91affe2f8d7773df3753a376fcae05",
+          "intent-audit-each-build": "b28cb22b681ee1522794affcb5639f19b8a2707a",
+          "intent-browser-clients": "77b7109cd18da279c81d831eafeadb4bdd174859",
+          "intent-chat-completion": "8dbb44a0ac9123cd925d13f3c9ab294b5feb856f",
+          "intent-clean-content-optin": "7cc76ea9d7d57a00cc80507a052a88d1541676c7",
+          "intent-forced-tool-calls": "c676077f25479779c1fb35de6654e6b3492ab85b",
+          "intent-run-the-stack": "ddec8b304133692d0372b9d59da3ff5022079911",
+          "intent-typed-errors": "c1e720ed2994f9f6ff513ee23462d37ac1831627",
+          "intent-unmodified-schemas": "d7454f762fc4b225b0400b9930ae343078d76404",
+          "resp-behaviour-verification": "d0665980b7f3cb67758dff3c0b1ceb17b0f371ab",
+          "resp-browser-access": "f8bf707f721c875a2fff05af1080ffbc7a30e734",
+          "resp-error-typing-and-retry": "f5efc81851c8a5a1643a2514ca155b66cdcf4d0c",
+          "resp-forced-tool-dispatch": "bea9f77cc97396a01e0d41f3cb4704d4847583e3",
+          "resp-request-normalization": "9c268b48ca44d633d60bbbe1781b9a620a33a7f7",
+          "resp-response-relay": "dff5ceaf3759a3ecb20e71fb4b7fea3fa5187323",
+          "resp-schema-translation": "1a81dc89075a19a6b03b91d530b7fd25031e73e2",
+          "resp-stack-lifecycle": "94c9da27e38098631575f88791c5f95fd98eee3c",
+          "resp-upstream-tracking": "29d29eb1af68d4f10a31ec7c42558cd04f0ac382",
+          "resp-user-guidance": "c7ac9a428c98adc6b3cb024c25c378ca640dfc83"
+        },
+        "impact_set": [
+          "comp-proxy-runtime",
+          "comp-verification",
+          "impl-fm-launch-sh",
+          "impl-fm-proxy-js",
+          "impl-fm-proxy-test-js",
+          "impl-tools-wire-baseline-js",
+          "intent-audit-each-build",
+          "intent-browser-clients",
+          "intent-chat-completion",
+          "intent-clean-content-optin",
+          "intent-forced-tool-calls",
+          "intent-run-the-stack",
+          "intent-typed-errors",
+          "intent-unmodified-schemas",
+          "resp-behaviour-verification",
+          "resp-browser-access",
+          "resp-error-typing-and-retry",
+          "resp-forced-tool-dispatch",
+          "resp-request-normalization",
+          "resp-response-relay",
+          "resp-schema-translation",
+          "resp-stack-lifecycle"
+        ],
+        "notes": {
+          "s1": "no change to resp-stack-lifecycle: its promise (env-driven ports, clean stop) is right; the launcher broke it by not exporting ports and by pkill-ing any fm serve on its port. fm_native impl-surface-serve-md: a second fm serve on a busy port prints its banner then exits 1 (Address already in use)."
+        },
+        "phase": 3,
+        "plan": {
+          "steps": [
+            {
+              "aim": "confirm env-driven ports and clean stop are the responsibility the launcher breaks",
+              "id": "s1",
+              "kind": "investigate",
+              "target": "resp-stack-lifecycle"
+            },
+            {
+              "aim": "succeed it: export ports/binary to the proxy, reuse an fm serve already on the port, and only ever kill its own child",
+              "expect": [
+                "impl-fm-launch-sh@v2"
+              ],
+              "id": "s2",
+              "kind": "develop",
+              "target": "impl-fm-launch-sh"
+            }
+          ]
+        }
+      },
+      "ledger": [
+        {
+          "at": 1792796852,
+          "detail": {
+            "dependents": [
+              "comp-proxy-runtime"
+            ],
+            "name": "impl-fm-launch-sh",
+            "prev_status": "drafting",
+            "uid": "n0006",
+            "ver": 1
+          },
+          "id": "op1",
+          "op": "retire-succeed",
+          "step": "s2"
+        }
+      ],
+      "mode": "change"
+    },
     "jeff-ingest-1761200000": {
       "ingest": {
         "aim": [
