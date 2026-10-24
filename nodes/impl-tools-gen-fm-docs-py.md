@@ -11,9 +11,10 @@
   "realized_fp": "1792787917:2793",
   "status": "drafting",
   "stratum": "implementation",
+  "succeeds": "impl-tools-gen-fm-docs-py@v1",
   "uid": "n0011",
-  "version": 1
+  "version": 2
 }
 -->
 
-Serves [[comp-upstream-audit|serves]]. Python script: runs FM_BIN --experimental-dump-help once, parses the ArgumentParser JSON tree, and writes [[impl-docs-fm-reference-md|flow]] (or --outdir) as markdown option tables. Step 1 of the audit in [[impl-agents-md]].
+Serves [[comp-upstream-audit|serves]]. Python script: runs fm --experimental-dump-help once for the ArgumentParser JSON tree, then runs each leaf command's own --help and strips ANSI colour. It compares the flags each source names (hidden dump args excluded, --[no-]x expanded) and writes [[impl-docs-fm-reference-md|flow]] (or --outdir) as option tables plus each leaf's --help text, with a DUMP/HELP MISMATCH note wherever the sources disagree. Never picks one silently; deterministic output. Step 1 of the audit in [[impl-agents-md]].

@@ -25,8 +25,10 @@ python3 tools/gen-fm-docs.py
 ```
 
 That writes `docs/fm-reference.md`, a per-command option table that greps well and reads
-well as agent context. It runs `fm --experimental-dump-help` once, rather than scraping
-`--help` recursively.
+well as agent context. It reads two sources: `fm --experimental-dump-help` once for the
+whole tree, and each leaf command's own `--help`, with ANSI colour stripped. The two can
+disagree, so it compares the flags each names and prints a `DUMP/HELP MISMATCH` note under
+any command where they differ. It never picks one silently. Output is deterministic.
 
 **The file is committed on purpose.** It is generated, so committing it is unusual, but
 it is the only record of Apple's CLI surface per build. The committed copy is the "before"
@@ -62,14 +64,18 @@ Audit recipe after any OS update:
    diff docs/fm-reference.md /tmp/fmnew/fm-reference.md
    ```
 
-   The tree is a compile-time dump, so a diff here is authoritative: Beta 7's was all
-   deletions, which is how PCC's removal was caught.
+   The file holds both the dump and every leaf's `--help`, so a change in either source
+   shows in this diff. Beta 7's diff was all deletions, which is how PCC's removal was
+   caught.
 
-   Caution: it is authoritative only for declared options. `fm schema object` takes its
-   properties as one passthrough argument, and the dump carries only that argument's
-   hand-written discussion text. On 27.0.1 the binary renamed `--nested` to `--object`
-   and rejects `--nested`, yet the dump still says `--nested`, so the diff was empty.
-   Read `fm schema object --help` by hand. Its usage example still says `--nested`.
+   Neither source is authoritative alone. `fm schema object` takes its properties as one
+   passthrough argument, and the dump carries only that argument's hand-written discussion
+   text. On 27.0.1 the binary renamed `--nested` to `--object` and rejects `--nested`, yet
+   the dump still says `--nested`. A dump-only diff was empty and missed it. The `--help`
+   capture now records `--object`, and the file flags the pair as a mismatch. `--help` can
+   be stale too: its usage example still says `--nested`, and it omits flags the dump
+   lists, such as `--use-case` on `fm chat`. Grep `DUMP/HELP MISMATCH`, and test any
+   flagged flag against the binary before you trust either side.
 
    Commit the regenerated file as part of the audit, whether or not it changed. An empty
    diff is a result, and the commit records which build the tree belongs to.
