@@ -77,6 +77,19 @@ Audit recipe after any OS update:
    lists, such as `--use-case` on `fm chat`. Grep `DUMP/HELP MISMATCH`, and test any
    flagged flag against the binary before you trust either side.
 
+   On 27.0.1 every flagged flag was tested; the evidence is in the private `fm_native`
+   repo under `raw/flags/`. A dump-only flag can be real, rejected, or a no-op:
+
+   | Command | Dump-only flag | Binary |
+   |---|---|---|
+   | `fm chat`, `fm available` | `--use-case` | Accepted: `general`, `content-tagging`. Content-tagging loads a tagger adapter and replies with tags. |
+   | `fm chat`, `fm available` | `--guardrails` | Accepted: `default`, `permissive-content-transformations`. Permissive let a violent translation through that default refused. |
+   | `fm count-tokens` | `--schema`, `--verbose`, `-v` | Rejected, exit 1 |
+   | `fm count-tokens` | `--label` | Parsed, no effect. It needs `--tool`, which `count-tokens` lacks. |
+   | `fm schema object` | `--nested` | Rejected, exit 1. Use `--object`. |
+
+   Values are kebab-case. The camelCase spellings, such as `contentTagging`, exit 1.
+
    Commit the regenerated file as part of the audit, whether or not it changed. An empty
    diff is a result, and the commit records which build the tree belongs to.
 2. **Behaviour** — the help tree can stay identical while behaviour changes, and the

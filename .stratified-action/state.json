@@ -162,6 +162,35 @@
       ],
       "mode": "change"
     },
+    "flags-5880-1792870361": {
+      "ledger": [
+        {
+          "at": 1792870477,
+          "detail": {
+            "dependents": [
+              "comp-upstream-audit"
+            ],
+            "name": "impl-agents-md",
+            "prev_status": "drafting",
+            "uid": "n0002",
+            "ver": 4
+          },
+          "id": "op1",
+          "op": "retire-succeed",
+          "step": "s1"
+        },
+        {
+          "at": 1792870477,
+          "detail": {
+            "name": "impl-agents-md"
+          },
+          "id": "op2",
+          "op": "revise-prose",
+          "step": "s1"
+        }
+      ],
+      "mode": null
+    },
     "jeff-70319-1792788155": {
       "mode": null
     },

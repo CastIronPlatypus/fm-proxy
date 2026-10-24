@@ -120,3 +120,12 @@
 - [1792868597] **retire** — impl-agents-md@v3 -> v4; reason: 27.0.1 measurement: a cyclic defs schema with no escape hangs every inference on fm serve; AGENTS.md now records it; perturbed: []
 - [1792868606] **change-done** — s2
 - [1792868607] **change** — walk -> settle
+- [1792870461] **begin** — change
+- [1792870466] **comprehend** — modify=['impl-agents-md']; attach=[]; impact=6 node(s)
+- [1792870466] **set-changeplan** — 1 step(s)
+- [1792870466] **change** — plan -> walk
+- [1792870477] **retire** — impl-agents-md@v4 -> v5; reason: record the tested outcome of the dump-only fm flags; perturbed: []
+- [1792870477] **revise-prose** — impl-agents-md
+- [1792870477] **change-done** — s1
+- [1792870477] **change** — walk -> settle
+- [1792870490] **change** — settle -> idle (finalized)
