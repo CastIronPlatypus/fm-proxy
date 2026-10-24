@@ -131,8 +131,10 @@ proxy, because `fm serve` rejects it. Other sampling parameters pass through unc
 
 Wait for `stack up — OpenAI base URL: http://127.0.0.1:1977/v1`.
 
-The launcher runs `fm serve` in the foreground and the proxy as a background child.
-Press Ctrl-C to stop both. Do not press Ctrl-Z: a suspended `fm serve` keeps the port.
+The launcher starts the proxy and then `fm serve`, and blocks on `fm serve`.
+Press Ctrl-C to stop both. If an `fm serve` is already running on the fm port, the
+launcher reuses it and leaves it running when you stop the launcher. If either port is
+held by anything else, it exits with an error. Do not press Ctrl-Z: a suspended `fm serve` keeps the port.
 
 Beta 7 removed the `pcc` model, so the Terminal.app foreground rule that Private Cloud
 Compute needed no longer applies. The `system` model works in any terminal, and in a

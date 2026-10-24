@@ -297,12 +297,12 @@ dispatch schema wins.
 
 #### Expected test results
 
-108 unit tests pass. The wire baseline records 14 cases and 3 endpoints.
+145 unit tests pass. The wire baseline records 14 cases and 3 endpoints.
 `node tools/deviation-probe.js 1977` reports 11 of 11 handled. `tools/harness-check.sh`
 reports 6 passed and 1 failed; the failure is the `pi` case described in
 `tools/TEST_PLAN.md`.
 
-A test skips when `fm` cannot answer, so a run during a model-service fault reports 106
+A test skips when `fm` cannot answer, so a run during a model-service fault reports 143
 passed and 2 skipped. That is the machine, not the code.
 
 Caution: pin `FM_BIN` to a path that does not exist for **both** runs when you compare
@@ -331,6 +331,7 @@ authoritative for what is true now.
 | Beta 7 `26A5421a` | 2.0.68.1.402 | **PCC removed from the binary**, with `fm quota-usage`. Non-cyclic `$defs` fixed. `array<array<object>>` accepted. Titled strings began requiring an `enum`. Audit fixed two proxy hazards in `57f26d3`: a forwarded cyclic schema, and a retried terminal 400. |
 | Beta 8 `26A5425a` | 2.0.68.1.402 | Rebuilt binary, identical CLI surface. No behaviour change. Audit fixed a proxy bug: a capped stream emitted two `finish_reason` values. |
 | RC `26A428` | 2.0.68.1.402 | Rebuilt binary, identical CLI surface. The RC audit found the tool-call marker leak. A clean-room record shows Beta 7 leaked too. |
+| 27.0.1 `26A434` | 2.0.68.1.402 | Help tree byte-identical (per `fm_native`). `stop` now `400`s and `json_object` and remote image URLs `400`; the proxy already handles all three. `max_completion_tokens` is roughly honoured, with `finish_reason` left at `stop`. A second `fm serve` on a busy port prints its banner, then exits 1 `Address already in use`. That exposed a launcher bug, fixed here: `fm-launch.sh` killed any `fm serve` on its port, including one it had not started, and never passed its port flags to the proxy. |
 
 Three builds now share `fm` 2.0.68.1.402 and produce a byte-identical help tree, so only
 the binary's mtime distinguishes them. The help tree does not show behaviour. Audit both layers

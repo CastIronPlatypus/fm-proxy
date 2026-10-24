@@ -2366,3 +2366,48 @@ test("streaming: an unusable dispatched reply still streams as content", async (
   }
   assert.strictEqual(text, "I cannot do that.");
 });
+
+// fm-launch.sh: its --fm-port/--proxy-port flags must reach the proxy, and an fm serve
+// already listening on the port must be reused and left running, never killed. A stub
+// HTTP server stands in for fm serve, so no model is involved.
+test("fm-launch.sh honours its port flags and reuses a running fm serve without killing it", async () => {
+  const fake = http.createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ status: "fm serve is running", models: [] }));
+  });
+  await new Promise((r) => fake.listen(0, "127.0.0.1", r));
+  const fmPort = fake.address().port;
+  const probe = http.createServer();
+  await new Promise((r) => probe.listen(0, "127.0.0.1", r));
+  const proxyPort = probe.address().port;
+  await new Promise((r) => probe.close(r));
+
+  const env = { ...process.env };
+  delete env.FM_PORT; delete env.PROXY_PORT;
+  delete env.NODE_TEST_CONTEXT; // else the proxy child talks the test-runner protocol
+  const child = spawn("bash", [path.join(__dirname, "fm-launch.sh"),
+    "--fm-port", String(fmPort), "--proxy-port", String(proxyPort), "--fm-bin", "/nonexistent"],
+    { env, stdio: ["ignore", "pipe", "pipe"] });
+  const exited = new Promise((r) => child.on("exit", r));
+  let out = "";
+  child.stdout.on("data", (d) => (out += d));
+  child.stderr.on("data", (d) => (out += d));
+  try {
+    const deadline = Date.now() + 10000;
+    let body = null;
+    while (Date.now() < deadline && (body === null || !/stack up/.test(out))) {
+      body = await new Promise((resolve) => {
+        http.get({ host: "127.0.0.1", port: proxyPort, path: "/health" }, (res) => {
+          let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve(b));
+        }).on("error", () => setTimeout(() => resolve(null), 200));
+      });
+    }
+    assert.ok(body && body.includes("fm serve is running"), `proxy on :${proxyPort} did not forward to :${fmPort}\n${out}`);
+    assert.match(out, /reusing it/);
+  } finally {
+    child.kill("SIGTERM");
+    await exited;
+  }
+  assert.ok(fake.listening, "the launcher killed the fm serve it did not start");
+  await new Promise((r) => fake.close(r));
+});

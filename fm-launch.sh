@@ -3,8 +3,7 @@
 #
 #   Apple `fm serve` (the entitled engine)  +  fm-proxy.js (OpenAI-compat shim)
 #
-# fm serve runs in the FOREGROUND (this script blocks on it) so Ctrl-C reaches it
-# directly. Beta 7 removed Private Cloud Compute, so the old Terminal.app foreground
+# The script blocks on fm serve (started by PID and waited on) and Ctrl-C stops both. Beta 7 removed Private Cloud Compute, so the old Terminal.app foreground
 # requirement is gone: the `system` model works in any terminal, backgrounded or not.
 #
 # The proxy is a backgrounded child. Traps on INT/TERM/HUP/EXIT tear it down so it
@@ -109,18 +108,41 @@ wait_listening() {  # $1 = port, $2 = timeout_ms
 
 # ── orchestration ────────────────────────────────────────────────────────────
 PROXY_PID=""
+FM_PID=""
+WAIT_PID=""
 cleaning=false
 cleanup() {
   $cleaning && return
   cleaning=true
-  # Kill the backgrounded proxy by PID; fm serve is foreground and dies with the signal
-  # that ended the script (Ctrl-C → SIGINT to the foreground group). Best-effort pkill
-  # mops up any fm serve that lingered (e.g. SIGTERM/SIGHUP to the script itself).
+  # Kill the backgrounded proxy by PID.
   [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2>/dev/null
-  pkill -f "fm serve --port $FM_PORT" 2>/dev/null
+  # Only ever reap the fm serve THIS script started, by PID. A pattern match on the port
+  # also killed an fm serve the user already had running there.
+  [ -n "$FM_PID" ] && kill "$FM_PID" 2>/dev/null
+  [ -n "$WAIT_PID" ] && kill "$WAIT_PID" 2>/dev/null
   wait 2>/dev/null
 }
 trap cleanup INT TERM HUP EXIT
+
+# The proxy reads its ports and binary from the environment, so export them: shell
+# variables set from --fm-port/--proxy-port/--fm-bin never reached it otherwise, and it
+# fell back to 1977 -> 1976 whatever the flags said.
+export FM_PORT PROXY_PORT FM_BIN
+
+# fm serve on 26A434 prints its banner and THEN exits 1 with "Address already in use",
+# so a second one on a busy port looks healthy for a moment. Check first, and reuse a
+# running fm serve instead of starting (and then tearing down) a doomed duplicate.
+REUSE_FM=false
+if probe_health "$FM_PORT"; then
+  REUSE_FM=true
+elif probe_listening "$FM_PORT"; then
+  sayerr "port :$FM_PORT is in use by something that is not fm serve; pick another --fm-port"
+  exit 1
+fi
+if probe_listening "$PROXY_PORT"; then
+  sayerr "port :$PROXY_PORT is already in use; stop the other proxy or pick another --proxy-port"
+  exit 1
+fi
 
 # 1) the proxy — backgrounded; it only forwards to fm serve.
 say "starting proxy on :$PROXY_PORT  → forwarding to :$FM_PORT"
@@ -129,6 +151,13 @@ PROXY_PID=$!
 if ! wait_listening "$PROXY_PORT" 10000; then
   sayerr "proxy did not start listening on :$PROXY_PORT"
   exit 1
+fi
+
+if $REUSE_FM; then
+  say "fm serve already running on :$FM_PORT — reusing it (it will be left running)"
+  say "stack up — OpenAI base URL: http://127.0.0.1:$PROXY_PORT/v1  (any dummy API key)"
+  wait "$PROXY_PID"
+  exit $?
 fi
 
 # 2) fm serve — FOREGROUND (blocks here).
@@ -144,8 +173,14 @@ say "starting fm serve on :$FM_PORT  (FOREGROUND)"
     sayerr "fm serve did not become healthy on :$FM_PORT. Is Apple Intelligence enabled, and the CLI licence accepted (sudo fm license)?"
   fi
 ) &
+WAIT_PID=$!
 
-"$FM_BIN" serve --port "$FM_PORT"          # FOREGROUND — blocks here
+# Started with & and waited on, so the script holds its PID and a signal to the script
+# runs the trap at once (bash defers traps while a true foreground child runs). Output
+# still goes raw to the terminal; Ctrl-C reaches the script and the trap stops fm serve.
+"$FM_BIN" serve --port "$FM_PORT" &
+FM_PID=$!
+wait "$FM_PID"
 fm_rc=$?
 # fm serve exited (Ctrl-C / crash). EXIT trap reaps the proxy.
 exit "$fm_rc"
