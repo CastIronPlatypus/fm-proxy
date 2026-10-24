@@ -14,9 +14,10 @@
   "node_type": "unclassified",
   "status": "drafting",
   "stratum": "responsibilities",
+  "succeeds": "resp-schema-translation@v1",
   "uid": "n0018",
-  "version": 1
+  "version": 2
 }
 -->
 
-Serves [[intent-forced-tool-calls|serves]], [[intent-unmodified-schemas|serves]]. Translate client JSON Schemas into the subset fm serve decodes, in [[comp-proxy-runtime]]: inline $defs/$ref, collapse type arrays and composition keywords, backfill tool descriptions, and reject cyclic $defs before any upstream connection.
+Serves [[intent-forced-tool-calls|serves]], [[intent-unmodified-schemas|serves]]. Translate client JSON Schemas into the subset fm serve decodes, in [[comp-proxy-runtime]]: inline $defs/$ref, collapse type arrays and composition keywords, backfill tool descriptions, and handle recursive $defs. A recursive response_format schema keeps its $defs, gains the fm dialect and is forwarded only in the shapes proven on 27.0.1: each recursive $ref sits on a property of a $defs entry as a plain $ref, array items without minItems, or anyOf [$ref, null], and every cycle passes through an optional property or such an array. Any other recursion is rejected before any upstream connection with a 400 cyclic_schema naming the recursion path and the fix.

@@ -298,8 +298,16 @@ function capitalizeTitle(name) {
 }
 
 // Recursively inject the dialect under `node` (only walked from inside $defs).
+// Two more repairs apply here, both measured on 27.0.1 (26A434): a `title` on a string
+// schema without a non-empty `enum` makes it a named string type and 400s (pydantic
+// titles every field), and an `anyOf` that is not a null union 400s without a `title`.
 function decorateDialect(node, titleHint) {
   if (!node || typeof node !== "object" || Array.isArray(node)) return;
+  if (node.type === "string" && node.title && !(Array.isArray(node.enum) && node.enum.length)) delete node.title;
+  if (Array.isArray(node.anyOf)) {
+    if (!node.title && !node.anyOf.some((b) => b && b.type === "null")) node.title = titleHint;
+    for (const branch of node.anyOf) decorateDialect(branch, titleHint);
+  }
   if (node.items) decorateDialect(node.items, titleHint);
   if (!isDialectObjectSchema(node)) return;
   const props = node.properties || {};
@@ -344,50 +352,124 @@ function inlineDefs(schema) {
   return bailed ? null : result;
 }
 
-// Detect a definition that reaches itself through $refs, directly or transitively.
-// Returns the first cyclic definition's name, or null when the graph is acyclic.
+// Check a recursive $defs against the shapes proven to work on fm serve, and return
+// null when it fits them or { path, message } when it does not.
 //
-// Forwarding a cyclic $defs hangs fm serve permanently, and every later request hangs
-// with it until a restart. Recursion has no finite inline form, so these must be
-// rejected rather than repaired. A cycle carrying an extra required scalar happens to
-// return 200 today, but that is an undocumented parser quirk — do not bet on it.
-function findCyclicDefs(schema) {
+// Measured on 27.0.1 (26A434), with the dialect present, a recursive schema returns
+// conforming output only when each recursive $ref sits on a property of a $defs entry,
+// as a plain $ref, as the items of an array, or as anyOf [$ref, null], and every cycle
+// passes through an escape: a property left out of `required`, or an array without
+// `minItems`. That covers what pydantic and zod emit for trees, linked lists and
+// comment threads. A cycle with no escape either hangs fm serve, and the whole model
+// service with it, until a restart, or returns output that does not conform. Recursion
+// through a nested inline object returned 500, and through an anyOf with a non-null
+// branch it did not conform. Everything outside the proven shapes is rejected before
+// any upstream connection, rather than guessed at.
+function defRefName(node, defs) {
+  if (!node || typeof node !== "object" || typeof node.$ref !== "string") return null;
+  if (!node.$ref.startsWith(DEFS_REF_PREFIX)) return null;
+  const name = node.$ref.slice(DEFS_REF_PREFIX.length);
+  return Object.prototype.hasOwnProperty.call(defs, name) ? name : null;
+}
+
+// Every $ref to a definition anywhere under `node`, with its path.
+function collectRefs(node, defs, at, into) {
+  if (!node || typeof node !== "object") return into;
+  if (Array.isArray(node)) { node.forEach((n, i) => collectRefs(n, defs, `${at}[${i}]`, into)); return into; }
+  const ref = defRefName(node, defs);
+  if (ref !== null) into.push({ at, def: ref });
+  for (const [k, v] of Object.entries(node)) if (k !== "$ref") collectRefs(v, defs, at ? `${at}.${k}` : k, into);
+  return into;
+}
+
+// The recursive $ref a property holds in one of the proven shapes, or null.
+function provenEdge(prop, defs) {
+  const direct = defRefName(prop, defs);
+  if (direct !== null) return { def: direct, array: false };
+  if (prop && prop.type === "array" && !(prop.minItems > 0)) {
+    const item = defRefName(prop.items, defs);
+    if (item !== null) return { def: item, array: true };
+  }
+  if (prop && Array.isArray(prop.anyOf) && prop.anyOf.length === 2) {
+    const nul = prop.anyOf.findIndex((b) => b && b.type === "null");
+    const other = nul >= 0 ? defRefName(prop.anyOf[1 - nul], defs) : null;
+    if (other !== null) return { def: other, array: false };
+  }
+  return null;
+}
+
+function findUnescapableCycle(schema) {
   const defs = schema && schema.$defs;
   if (!defs || typeof defs !== "object") return null;
-  const scanRefs = (node, into) => {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { for (const n of node) scanRefs(n, into); return; }
-    if (typeof node.$ref === "string") {
-      const name = node.$ref.startsWith(DEFS_REF_PREFIX) ? node.$ref.slice(DEFS_REF_PREFIX.length) : null;
-      if (name !== null && Object.prototype.hasOwnProperty.call(defs, name)) into.add(name);
+  const names = Object.keys(defs);
+  const refsOf = new Map(names.map((n) => [n, collectRefs(defs[n], defs, "", [])]));
+  const reaches = (from, to) => {
+    const seen = new Set(), stack = [from];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const r of refsOf.get(cur)) {
+        if (r.def === to) return true;
+        if (!seen.has(r.def)) { seen.add(r.def); stack.push(r.def); }
+      }
     }
-    for (const v of Object.values(node)) scanRefs(v, into);
+    return false;
   };
-  const done = new Set(); // definitions fully explored with no cycle through them
-  const dfs = (name, stack) => {
-    if (stack.has(name)) return name; // the definition reached itself: cycle
-    if (done.has(name)) return null;
-    stack.add(name);
-    const refs = new Set();
-    scanRefs(defs[name], refs);
-    for (const r of refs) {
-      const hit = dfs(r, stack);
-      if (hit) return hit;
+  const shapeFix = "Put each recursive $ref directly on a property of a $defs entry, as a " +
+    "plain $ref, as the items of an array without minItems, or as anyOf [$ref, {\"type\":\"null\"}].";
+  const forced = new Map(names.map((n) => [n, []]));
+  for (const name of names) {
+    const props = (defs[name] && defs[name].properties) || {};
+    const required = new Set(Array.isArray(defs[name].required) ? defs[name].required : []);
+    const proven = new Set();
+    for (const [key, prop] of Object.entries(props)) {
+      const edge = provenEdge(prop, defs);
+      if (!edge || !reaches(edge.def, name)) continue;
+      proven.add(`properties.${key}`);
+      if (required.has(key) && !edge.array) forced.get(name).push({ key, def: edge.def });
     }
-    stack.delete(name);
-    done.add(name);
+    for (const r of refsOf.get(name)) {
+      if (!reaches(r.def, name)) continue;
+      const owner = r.at.split(".").slice(0, 2).join(".");
+      if (proven.has(owner)) continue;
+      const path = `${name}.${r.at} -> ${r.def}`;
+      return { path, message: `response_format schema recurses through ${path} in a shape ` +
+        `fm serve has not been shown to handle: it hangs, returns 500, or returns output ` +
+        `that does not match the schema. ${shapeFix}` };
+    }
+  }
+  // Every cycle needs an escape. Follow only the forced edges; any loop left is one.
+  const state = new Map();
+  const walk = (name, trail) => {
+    state.set(name, 1);
+    for (const e of forced.get(name)) {
+      const step = { from: name, ...e };
+      if (state.get(e.def) === 1) {
+        const loop = trail.concat(step).slice(trail.concat(step).findIndex((s) => s.from === e.def));
+        return loop;
+      }
+      if (!state.has(e.def)) { const hit = walk(e.def, trail.concat(step)); if (hit) return hit; }
+    }
+    state.set(name, 2);
     return null;
   };
-  for (const name of Object.keys(defs)) {
-    const hit = dfs(name, new Set());
-    if (hit) return hit;
+  for (const name of names) {
+    if (state.has(name)) continue;
+    const loop = walk(name, []);
+    if (!loop) continue;
+    const path = loop.map((s) => `${s.from}.${s.key}`).concat(loop[0].from).join(" -> ");
+    const key = loop[loop.length - 1].key;
+    return { path, message: `response_format schema has a recursive $defs cycle that can ` +
+      `never end: ${path}. Every step is required, so no finite value fits, and fm serve ` +
+      `hangs or returns output that does not match the schema. To fix it, remove \`${key}\` ` +
+      `from required, or make it an array without minItems.` };
   }
   return null;
 }
 
 // Inline the $refs, or fall back to dialect injection when the schema cannot be
-// inlined. A cyclic schema never reaches here in production — fixTools rejects it
-// first — so the fallback is defence in depth for direct callers.
+// inlined. A recursive schema always takes the fallback, and fm serve decodes it
+// through $defs once the dialect is present. fixTools then rejects a cycle that
+// cannot end.
 // Walk a response_format schema and collapse every `type` array in place. Unlike a tool
 // schema this one is not otherwise simplified: fm serve decodes nested objects here
 // natively, so only the shapes it rejects are repaired.
@@ -541,14 +623,13 @@ function fixTools(body) {
       const js = parsed.response_format.json_schema;
       // Assign the result: inlining returns a NEW schema rather than mutating in place.
       if (js && js.schema) {
-        // A cyclic $defs cannot be inlined (recursion has no finite inline form) and
-        // forwarding it to fm serve HANGS the server permanently — every later request
-        // hangs too, until a restart. Reject the request with a client error
-        // naming the offending definition instead (see findCyclicDefs; the request
-        // handler answers 400 before any upstream connection is made).
-        const cyclic = findCyclicDefs(js.schema);
-        if (cyclic) return { body, parsed, responseFormatCycle: cyclic };
         js.schema = fixResponseFormatSchema(js.schema);
+        // A recursive $defs is forwarded with the dialect when every cycle can end. A
+        // cycle with no escape hangs fm serve, and the model service with it, until a
+        // restart, so the request handler answers 400 before any upstream connection.
+        // The check runs on the schema as forwarded, after type arrays are collapsed.
+        const cycle = findUnescapableCycle(js.schema);
+        if (cycle) return { body, parsed, responseFormatCycle: cycle };
       }
     }
     // `stop` is returned on its own, NEVER re-attached to `parsed`. Callers re-serialise
@@ -670,7 +751,7 @@ function retryOrSurface(cls, ctxLabel, extra, reason, fail, diag) {
 
 // Exported for tests when required as a module; harmless when run directly.
 if (require.main !== module) {
-  module.exports = { fixTools, fixToolSchema, fixResponseFormatSchema, findCyclicDefs, classifyError, errorFrame, fmTokenCount, _isLicenseGate, stripTemplateMarkers, truncateAtStop, buildToolDispatch, dispatchToToolCalls };
+  module.exports = { fixTools, fixToolSchema, fixResponseFormatSchema, findUnescapableCycle, classifyError, errorFrame, fmTokenCount, _isLicenseGate, stripTemplateMarkers, truncateAtStop, buildToolDispatch, dispatchToToolCalls };
 }
 
 // CORS for browser clients; `*` by default, override with CORS_ORIGIN, on every response.
@@ -1247,15 +1328,12 @@ const server = http.createServer((req, res) => {
     const diag = (label, extra = "") =>
       console.error(`[fm-proxy] *** ${label} ***` + (extra ? ` ${extra}` : ""));
 
-    // A cyclic $defs in response_format would hang fm serve PERMANENTLY — only a
-    // restart clears it, and every later request hangs too. Reject it here,
-    // before any upstream connection: a clear 400 invalid_request_error naming the
-    // offending definition, so the client can fix the schema instead of poisoning
-    // the server.
+    // A $defs cycle that can never end would hang fm serve until a restart, and every
+    // later request with it. Reject it here, before any upstream connection, with a 400
+    // that names the cycle and the fix.
     if (responseFormatCycle) {
-      diag("CYCLIC $defs REJECTED", `— response_format definition '${responseFormatCycle}'`);
-      const message = `response_format schema contains a cyclic $defs definition '${responseFormatCycle}' — ` +
-        "recursive schemas have no finite inline form and hang fm serve; remove the cycle";
+      diag("UNENDING $defs CYCLE REJECTED", `— ${responseFormatCycle.path}`);
+      const message = responseFormatCycle.message;
       res.writeHead(400, { "content-type": "application/json", ...CORS_HEADERS });
       res.end(JSON.stringify({ error: { message, type: "invalid_request_error", code: "cyclic_schema" } }));
       return;

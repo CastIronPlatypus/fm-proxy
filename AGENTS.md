@@ -201,8 +201,9 @@ The proxy is a drop-in OpenAI endpoint — point any OpenAI client at it and go:
     retry re-sends the same oversized transcript. Terminal: trim the prompt. The HTTP
     status stays fm serve's 500 — branch on `type`, as with `tool_choice_unsupported`.
   - `type: "invalid_request_error"` (`code: "cyclic_schema"`) — a `response_format`
-    schema whose `$defs` refer to themselves. Rejected by the proxy before any upstream
-    connection, because forwarding one hangs `fm serve` permanently.
+    schema that recurses in a shape `fm serve` has not been shown to handle. Rejected by
+    the proxy before any upstream connection. The message names the recursion path, such
+    as `Node.child -> Node`, and says how to fix it. See "Recursive schemas" below.
   - `type: "rate_limit_exceeded"` (`code: -1`) — capacity/rate-limit
     (`LanguageModelError -1`), transient. The proxy retries these with backoff before
     surfacing; if you still see one, back off and retry.
@@ -337,8 +338,8 @@ Measured on 27.0.1 against a private `fm serve`. The schema was a `Node` whose r
   succeeded. Error 15 did not appear.
 
 A cycle with an escape is safe: `Person` with `friends: array of Person` returned `200` in
-about a second and left the server healthy. The proxy rejects every cycle with `cyclic_schema`,
-the safe shape included.
+about a second and left the server healthy. The proxy forwards the shapes proven safe and
+rejects the rest; see "Recursive schemas".
 
 #### Operational notes
 
@@ -357,12 +358,12 @@ the safe shape included.
 
 #### Expected test results
 
-145 unit tests pass. The wire baseline records 22 cases and 3 endpoints.
+163 unit tests pass. The wire baseline records 22 cases and 3 endpoints.
 `node tools/deviation-probe.js 1977` reports 11 of 11 handled. `tools/harness-check.sh`
 reports 6 passed and 1 failed; the failure is the `pi` case described in
 `tools/TEST_PLAN.md`.
 
-A test skips when `fm` cannot answer, so a run during a model-service fault reports 143
+A test skips when `fm` cannot answer, so a run during a model-service fault reports 161
 passed and 2 skipped. That is the machine, not the code.
 
 Caution: pin `FM_BIN` to a path that does not exist for **both** runs when you compare
@@ -567,6 +568,32 @@ to injecting the dialect only when a schema cannot be inlined. This matters beca
 pydantic, zod-to-json-schema, and TypeBox all emit `$defs`/`$ref` for named types, so an
 ordinary client would otherwise get a `400`.
 
-Warning: a cyclic `$defs` has no finite inline form, and forwarding one with no escape
-hangs every inference request on `fm serve` until a restart. The proxy rejects it with `400` `cyclic_schema` before it opens an upstream
-connection.
+#### Recursive schemas
+
+A recursive `$defs` has no finite inline form, so the proxy keeps `$defs`, adds the
+dialect, and forwards it only in a shape proven on 27.0.1. Two rules must both hold:
+
+- **Where the recursion sits.** Each recursive `$ref` is a property of a `$defs` entry,
+  written as a plain `$ref`, as the `items` of an array without `minItems`, or as
+  `anyOf: [$ref, {"type": "null"}]`.
+- **How each cycle ends.** Every cycle passes through a property left out of `required`,
+  or through such an array, which can be empty.
+
+| Shape | Result |
+|---|---|
+| Optional self-reference, plain or `anyOf` with null | Forwarded, output conforms |
+| Array of self, no `minItems` | Forwarded, output conforms |
+| Mutual or four-step cycle with one optional or array link | Forwarded, output conforms |
+| pydantic and zod trees, linked lists and comment threads | Forwarded, output conforms |
+| Required self-reference, plain, `anyOf` with null, or `type` array with null | Rejected: hangs, or output does not conform |
+| Mutual or longer cycle with every link required | Rejected: output does not conform |
+| Array of self with `minItems: 1` | Rejected: output does not conform |
+| Recursion through a nested inline object | Rejected: `500`, or output does not conform |
+| Recursion inside an `anyOf` with a non-null branch | Rejected: output does not conform |
+
+The rejection is a `400` `cyclic_schema` sent before any upstream connection. A cycle with
+no escape gets "remove `child` from required, or make it an array without minItems". A
+shape outside the proven positions gets the list of positions that work.
+
+Warning: a required self-reference with nothing else in the object hangs every inference
+request on `fm serve` until a restart. Never send one direct to `fm serve`.

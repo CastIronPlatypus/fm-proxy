@@ -4,7 +4,7 @@ const assert = require("node:assert");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
-const { fixToolSchema, fixTools, fixResponseFormatSchema, findCyclicDefs, classifyError, errorFrame, fmTokenCount, _isLicenseGate, stripTemplateMarkers, truncateAtStop, buildToolDispatch, dispatchToToolCalls } = require("./fm-proxy.js");
+const { fixToolSchema, fixTools, fixResponseFormatSchema, findUnescapableCycle, classifyError, errorFrame, fmTokenCount, _isLicenseGate, stripTemplateMarkers, truncateAtStop, buildToolDispatch, dispatchToToolCalls } = require("./fm-proxy.js");
 
 // fm serve decodes nested tool parameters natively at every depth, including
 // array<array<object>>. Verified live: flat schemas, object chains of any depth,
@@ -464,85 +464,115 @@ test("an unresolvable $ref falls back rather than dropping the reference", () =>
   assert.ok(out.$defs, "unresolvable ref keeps $defs so the ref still points somewhere");
 });
 
-// ── cyclic $defs detection (Beta 7 hang guard) ─────────────────────────────────
-// A $defs definition that (transitively) reaches itself has no finite inline form,
-// and forwarding it to fm serve HANGS the server permanently — every later request
-// hangs too, until a restart (verified live: `{Node: {child: $ref Node}}` with no
-// other required property; adding a required scalar beside the recursive ref returns
-// 200, but the proxy cannot bet on that undocumented distinction across betas). So
-// the proxy must detect the cycle and reject the request with a client error naming
-// the offending definition, never forward it.
+// ── recursive $defs: forward cycles that can end, reject the rest ────────────────
+// Measured on 27.0.1 (26A434). fm serve decodes a recursive $defs once the dialect is
+// present, provided every cycle passes through an escape: an optional property, a
+// nullable or non-recursive anyOf branch, or an array that may be empty. A cycle with
+// no escape has no finite value: `{Node: {child: Node}}` with `child` required hung fm
+// serve and the model service until a restart. The proxy forwards the first kind and
+// answers 400 cyclic_schema for the second, naming the cycle and the fix.
 
+const ref = (n) => ({ $ref: `#/$defs/${n}` });
+const rooted = (prop, def, defs) => ({ type: "object", properties: { [prop]: ref(def) }, required: [prop], $defs: defs });
+const node = (properties, required = Object.keys(properties)) => ({ type: "object", properties, required });
+const STR = { type: "string" };
+
+const UNENDING = rooted("root", "Node", { Node: node({ child: ref("Node") }) });
+// The wire-baseline shape: `child` is not in `required`, so the cycle can end.
 const CYCLIC_SHAPE = {
   type: "object",
   properties: { root: { $ref: "#/$defs/Node" } },
   $defs: { Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" } } } },
 };
 
-test("findCyclicDefs: the wire-baseline 'response_format cyclic' shape is detected, naming Node", () => {
-  assert.strictEqual(findCyclicDefs(CYCLIC_SHAPE), "Node");
+const ENDS = {
+  "optional self-reference": rooted("root", "Node", { Node: node({ name: STR, child: ref("Node") }, ["name"]) }),
+  "optional self-reference with nothing else (wire baseline)": CYCLIC_SHAPE,
+  "optional nullable self-reference via anyOf": rooted("root", "Node", { Node: node({ name: STR, child: { anyOf: [ref("Node"), { type: "null" }] } }, ["name"]) }),
+  "array of self": rooted("root", "Node", { Node: node({ name: STR, children: { type: "array", items: ref("Node") } }) }),
+  "array of self with minItems 0": rooted("root", "Node", { Node: node({ name: STR, children: { type: "array", items: ref("Node"), minItems: 0 } }) }),
+  "mutual cycle, one link optional": rooted("a", "A", { A: node({ name: STR, b: ref("B") }), B: node({ name: STR, a: ref("A") }, ["name"]) }),
+  "mutual cycle, one link an array": rooted("a", "A", { A: node({ name: STR, b: ref("B") }), B: node({ name: STR, as: { type: "array", items: ref("A") } }) }),
+  "four-step chain, one link optional": rooted("a", "A", { A: node({ n: STR, b: ref("B") }), B: node({ n: STR, c: ref("C") }), C: node({ n: STR, d: ref("D") }), D: node({ n: STR, a: ref("A") }, ["n"]) }),
+  "pydantic tree (children: list[Node])": { $defs: { Node: { properties: { name: { title: "Name", type: "string" }, children: { items: ref("Node"), title: "Children", type: "array" } }, required: ["name", "children"], title: "Node", type: "object" } }, properties: { root: ref("Node") }, required: ["root"], title: "Tree", type: "object" },
+  "pydantic linked list (next: Optional[Node] = None)": { $defs: { ListNode: { properties: { value: { title: "Value", type: "integer" }, next: { anyOf: [ref("ListNode"), { type: "null" }], default: null } }, required: ["value"], title: "ListNode", type: "object" } }, properties: { head: ref("ListNode") }, required: ["head"], title: "LL", type: "object" },
+  "zod comment thread (replies: z.array(Comment))": { type: "object", properties: { top: ref("Comment") }, required: ["top"], additionalProperties: false, $defs: { Comment: { type: "object", properties: { author: STR, text: STR, replies: { type: "array", items: ref("Comment") } }, required: ["author", "text", "replies"], additionalProperties: false } } },
+};
+
+for (const [label, schema] of Object.entries(ENDS)) {
+  test(`findUnescapableCycle: a proven recursive shape is forwarded (${label})`, () => {
+    assert.strictEqual(findUnescapableCycle(fixResponseFormatSchema(structuredClone(schema))), null);
+  });
+}
+
+// Each entry: [schema, path named in the error, what the error tells the client to do].
+const REJECTED = {
+  "required self-reference": [UNENDING, "Node.child -> Node", /remove `child` from required, or make it an array without minItems/],
+  "required self-reference beside a scalar": [rooted("root", "Node", { Node: node({ name: STR, child: ref("Node") }) }), "Node.child -> Node", /remove `child` from required, or make it an array without minItems/],
+  "required nullable self-reference via anyOf": [rooted("root", "Node", { Node: node({ name: STR, child: { anyOf: [ref("Node"), { type: "null" }] } }) }), "Node.child -> Node", /remove `child` from required, or make it an array without minItems/],
+  // The proxy collapses a `type` array to its first non-null member before forwarding,
+  // so `type: ["object","null"]` beside a $ref loses its null.
+  "nullable spelled as a type array": [rooted("root", "Node", { Node: node({ name: STR, child: { type: ["object", "null"], ...ref("Node") } }) }), "Node.child -> Node", /remove `child` from required, or make it an array without minItems/],
+  "mutual cycle, both required": [rooted("a", "A", { A: node({ name: STR, b: ref("B") }), B: node({ name: STR, a: ref("A") }) }), "A.b -> B.a -> A", /remove `a` from required, or make it an array without minItems/],
+  "four-step chain, all required": [rooted("a", "A", { A: node({ n: STR, b: ref("B") }), B: node({ n: STR, c: ref("C") }), C: node({ n: STR, d: ref("D") }), D: node({ n: STR, a: ref("A") }) }), "A.b -> B.c -> C.d -> D.a -> A", /remove `a` from required, or make it an array without minItems/],
+  "array of self with minItems 1": [rooted("root", "Node", { Node: node({ name: STR, children: { type: "array", items: ref("Node"), minItems: 1 } }) }), "Node.properties.children.items -> Node", /shape fm serve has not been shown to handle/],
+  "cycle through a nested inline object": [rooted("root", "Node", { Node: node({ name: STR, wrap: node({ child: ref("Node") }) }) }), "Node.properties.wrap.properties.child -> Node", /shape fm serve has not been shown to handle/],
+  "cycle through a nested inline object, inner link optional": [rooted("root", "Node", { Node: node({ name: STR, wrap: node({ child: ref("Node") }, []) }) }), "Node.properties.wrap.properties.child -> Node", /shape fm serve has not been shown to handle/],
+  "anyOf with a non-null branch": [rooted("root", "Node", { Node: node({ name: STR, child: { anyOf: [ref("Node"), STR] } }) }), "Node.properties.child.anyOf[0] -> Node", /shape fm serve has not been shown to handle/],
+};
+
+for (const [label, [schema, path, fix]] of Object.entries(REJECTED)) {
+  test(`findUnescapableCycle: an unproven recursive shape is rejected, naming its path (${label})`, () => {
+    const hit = findUnescapableCycle(fixResponseFormatSchema(structuredClone(schema)));
+    assert.ok(hit, "expected a rejection");
+    assert.strictEqual(hit.path, path);
+    assert.ok(hit.message.includes(path), hit.message);
+    assert.match(hit.message, fix);
+  });
+}
+
+test("findUnescapableCycle: acyclic graphs, missing refs and schemas without $defs are never flagged", () => {
+  const diamond = rooted("a", "A", { A: node({ b: ref("B"), c: ref("C") }), B: node({ x: STR }), C: node({ b: ref("B") }) });
+  assert.strictEqual(findUnescapableCycle(diamond), null);
+  assert.strictEqual(findUnescapableCycle({ type: "object", $defs: { A: { $ref: "#/$defs/Missing" } } }), null);
+  assert.strictEqual(findUnescapableCycle({ type: "object", $defs: { A: { $ref: "https://example.com/schema" } } }), null);
+  assert.strictEqual(findUnescapableCycle({ type: "object", properties: { x: STR } }), null);
+  assert.strictEqual(findUnescapableCycle(null), null);
 });
 
-test("findCyclicDefs: a direct self-referencing definition is detected", () => {
-  const schema = {
-    type: "object",
-    properties: { a: { $ref: "#/$defs/A" } },
-    $defs: { A: { type: "object", properties: { a: { $ref: "#/$defs/A" } } } },
-  };
-  assert.strictEqual(findCyclicDefs(schema), "A");
+test("fixResponseFormatSchema decorates a recursive schema the way fm serve needs it", () => {
+  const out = fixResponseFormatSchema(structuredClone(ENDS["pydantic tree (children: list[Node])"]));
+  const n = out.$defs.Node;
+  assert.deepStrictEqual(n["x-order"], ["name", "children"]);
+  assert.strictEqual(n.additionalProperties, false);
+  assert.strictEqual(n.properties.name.title, undefined, "a titled string without an enum 400s, so the title goes");
+  assert.strictEqual(n.properties.children.items.$ref, "#/$defs/Node");
+  const any = fixResponseFormatSchema(structuredClone(REJECTED["anyOf with a non-null branch"][0]));
+  assert.strictEqual(any.$defs.Node.properties.child.title, "Child", "a non-null anyOf needs a title");
+  const nul = fixResponseFormatSchema(structuredClone(ENDS["optional nullable self-reference via anyOf"]));
+  assert.strictEqual(nul.$defs.Node.properties.child.title, undefined, "a null union needs none");
 });
 
-test("findCyclicDefs: a transitive cycle (A -> B -> A) is detected and names the definition that reaches itself", () => {
-  const schema = {
-    type: "object",
-    properties: { a: { $ref: "#/$defs/A" } },
-    $defs: {
-      A: { type: "object", properties: { b: { $ref: "#/$defs/B" } } },
-      B: { type: "object", properties: { a: { $ref: "#/$defs/A" } } },
-    },
-  };
-  assert.strictEqual(findCyclicDefs(schema), "A");
-});
-
-test("findCyclicDefs: a cycle hidden inside array items is still detected", () => {
-  const schema = {
-    type: "object",
-    properties: { root: { $ref: "#/$defs/Node" } },
-    $defs: { Node: { type: "object", properties: { kids: { type: "array", items: { $ref: "#/$defs/Node" } } } } },
-  };
-  assert.strictEqual(findCyclicDefs(schema), "Node");
-});
-
-test("findCyclicDefs: acyclic $defs graphs (diamonds, reuse) are not cycles", () => {
-  const schema = {
-    type: "object",
-    properties: { a: { $ref: "#/$defs/A" } },
-    $defs: {
-      A: { type: "object", properties: { b: { $ref: "#/$defs/B" }, c: { $ref: "#/$defs/C" } } },
-      B: { type: "object", properties: { x: { type: "string" } } },
-      C: { type: "object", properties: { b: { $ref: "#/$defs/B" } } },
-    },
-  };
-  assert.strictEqual(findCyclicDefs(schema), null);
-});
-
-test("findCyclicDefs: missing definitions and out-of-document refs are not cycles", () => {
-  assert.strictEqual(findCyclicDefs({ type: "object", $defs: { A: { $ref: "#/$defs/Missing" } } }), null);
-  assert.strictEqual(findCyclicDefs({ type: "object", $defs: { A: { $ref: "https://example.com/schema" } } }), null);
-  assert.strictEqual(findCyclicDefs({ type: "object", properties: { x: { type: "string" } } }), null);
-  assert.strictEqual(findCyclicDefs(null), null);
-  assert.strictEqual(findCyclicDefs({ type: "object", $defs: {} }), null);
-});
-
-test("fixTools flags a cyclic response_format as responseFormatCycle, never inlining it", () => {
+test("fixTools flags an unending response_format cycle as responseFormatCycle", () => {
   const { responseFormatCycle } = fixTools(JSON.stringify({
+    model: "system",
+    messages: [{ role: "user", content: "hi" }],
+    response_format: { type: "json_schema", json_schema: { name: "N", schema: UNENDING } },
+  }));
+  assert.strictEqual(responseFormatCycle.path, "Node.child -> Node");
+});
+
+test("fixTools forwards a cycle that can end, decorated, with $defs kept", () => {
+  const { body, responseFormatCycle } = fixTools(JSON.stringify({
     model: "system",
     messages: [{ role: "user", content: "hi" }],
     response_format: { type: "json_schema", json_schema: { name: "N", schema: CYCLIC_SHAPE } },
   }));
-  assert.strictEqual(responseFormatCycle, "Node");
+  assert.strictEqual(responseFormatCycle, undefined);
+  const schema = JSON.parse(body).response_format.json_schema.schema;
+  assert.deepStrictEqual(schema.$defs.Node["x-order"], ["child"]);
+  assert.deepStrictEqual(schema.$defs.Node.required, []);
 });
-
 test("fixTools leaves a NON-cyclic response_format alone (no false-positive responseFormatCycle)", () => {
   const { responseFormatCycle } = fixTools(JSON.stringify({
     model: "system",
@@ -812,7 +842,7 @@ test("a plain response_format with $defs/$ref reaches upstream inlined, with no 
   } finally { await stack.stop(); }
 });
 
-test("a cyclic $defs response_format is rejected 400 before reaching upstream (fm serve hang guard)", async () => {
+test("an unending $defs cycle in response_format is rejected 400 before reaching upstream (fm serve hang guard)", async () => {
   // Beta 7: forwarding this exact shape (the wire-baseline 'response_format cyclic'
   // fixture) hangs fm serve PERMANENTLY — every later request hangs too until a
   // restart. The proxy must answer 400 itself, naming the offending definition,
@@ -832,7 +862,7 @@ test("a cyclic $defs response_format is rejected 400 before reaching upstream (f
           schema: {
             type: "object",
             properties: { root: { $ref: "#/$defs/Node" } },
-            $defs: { Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" } } } },
+            $defs: { Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" } }, required: ["child"] } },
           },
         },
       },
@@ -846,12 +876,13 @@ test("a cyclic $defs response_format is rejected 400 before reaching upstream (f
     const obj = JSON.parse(res.body);
     assert.strictEqual(obj.error.type, "invalid_request_error");
     assert.strictEqual(obj.error.code, "cyclic_schema");
-    assert.match(obj.error.message, /Node/, "the error names the offending definition");
+    assert.match(obj.error.message, /Node\.child -> Node/, "the error names the cycle path");
+    assert.match(obj.error.message, /remove `child` from required/, "the error says how to fix it");
     assert.ok(Date.now() - t0 < 2000, "rejection is immediate, no backoff ladder");
   } finally { await stack.stop(); }
 });
 
-test("a cyclic $defs response_format on a STREAMING request is rejected 400 too", async () => {
+test("an unending $defs cycle on a STREAMING request is rejected 400 too", async () => {
   let upstreamHits = 0;
   const stack = await startStack({
     handler: (req, parsed, res) => { upstreamHits++; res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); },
@@ -860,7 +891,7 @@ test("a cyclic $defs response_format on a STREAMING request is rejected 400 too"
     const payload = JSON.stringify({
       model: "system", stream: true,
       messages: [{ role: "user", content: "hi" }],
-      response_format: { type: "json_schema", json_schema: { name: "N", schema: CYCLIC_SHAPE } },
+      response_format: { type: "json_schema", json_schema: { name: "N", schema: UNENDING } },
     });
     const res = await request(stack.proxyPort,
       { method: "POST", path: "/v1/chat/completions", headers: { "content-type": "application/json" } },
@@ -882,7 +913,7 @@ test("a cyclic $defs in a TOOL schema is not rejected by the response_format gua
     messages: [{ role: "user", content: "hi" }],
     tools: [{
       type: "function",
-      function: { name: "tree", description: "Tree", parameters: CYCLIC_SHAPE },
+      function: { name: "tree", description: "Tree", parameters: UNENDING },
     }],
   }));
   assert.strictEqual(responseFormatCycle, undefined);

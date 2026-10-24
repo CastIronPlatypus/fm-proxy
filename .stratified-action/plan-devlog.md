@@ -129,3 +129,27 @@
 - [1792870477] **change-done** — s1
 - [1792870477] **change** — walk -> settle
 - [1792870490] **change** — settle -> idle (finalized)
+- [1792870890] **begin** — change
+- [1792870904] **comprehend** — modify=['intent-unmodified-schemas', 'resp-error-typing-and-retry', 'resp-schema-translation']; attach=[]; impact=8 node(s)
+- [1792870907] **change** — comprehend -> plan
+- [1792870925] **set-changeplan** — 4 step(s)
+- [1792871559] **change** — plan -> walk
+- [1792871707] **change-done** — s1 — confirmed: cyclic wording in resp-schema-translation and the error-typing node must change; forwarded recursive shapes are now limited to the 11 proven on 26A434
+- [1792871717] **retire** — intent-unmodified-schemas@v1 -> v2; reason: recursive generator schemas in proven shapes are now forwarded; other recursion rejected; perturbed: ['resp-schema-translation']
+- [1792871743] **change-done** — s2
+- [1792871746] **retire** — resp-schema-translation@v1 -> v2; reason: forward only the recursive shapes proven on 26A434, reject the rest naming the path; perturbed: ['comp-proxy-runtime']
+- [1792871751] **change-done** — s3
+- [1792871755] **retire** — impl-fm-proxy-js@v1 -> v2; reason: findCyclicDefs replaced by findUnescapableCycle (proven recursive shapes only); perturbed: []
+- [1792871763] **change-done** — s4
+- [1792871763] **change** — walk -> settle
+- [1792871769] **absorb** — comp-proxy-runtime absorbed the parent revision (unchanged)
+- [1792871775] **retire** — intent-unmodified-schemas@v2 -> v3; reason: child resp-schema-translation already revised in this run; perturbed: ['resp-schema-translation']
+- [1792871780] **absorb** — resp-schema-translation absorbed the parent revision (unchanged)
+- [1792871804] **begin** — change
+- [1792871814] **comprehend** — modify=['impl-agents-md', 'resp-schema-translation']; attach=[]; impact=12 node(s)
+- [1792871814] **change** — comprehend -> plan
+- [1792871819] **set-changeplan** — 1 step(s)
+- [1792871819] **change** — plan -> walk
+- [1792871819] **retire** — impl-agents-md@v5 -> v6; reason: AGENTS.md now documents the proven recursive shapes and the rejection; perturbed: []
+- [1792871825] **change-done** — s1
+- [1792871825] **change** — walk -> settle

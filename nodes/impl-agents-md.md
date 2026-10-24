@@ -11,10 +11,10 @@
   "realized_fp": "1792787917:30282",
   "status": "drafting",
   "stratum": "implementation",
-  "succeeds": "impl-agents-md@v4",
+  "succeeds": "impl-agents-md@v5",
   "uid": "n0002",
-  "version": 5
+  "version": 6
 }
 -->
 
-Serves [[comp-upstream-audit|serves]]. Agent/maintainer source of truth for upstream fm serve behaviour on 27.0.1 (including the measured cyclic `$defs` hang, which stalls every inference request on the server until a restart), the fm version fingerprint table, release history, and the per-OS-update audit recipe: regenerate [[impl-docs-fm-reference-md]] with [[impl-tools-gen-fm-docs-py|flow]] and diff (dump and per-leaf --help both captured; grep DUMP/HELP MISMATCH and test flagged flags against the binary; on 27.0.1 --use-case and --guardrails are real on chat and available, count-tokens rejects --schema and --verbose and ignores --label, and schema object rejects --nested), run the layers in [[impl-tools-test-plan-md]] including [[impl-tools-deviation-probe-js]], re-check known walls by hand (cyclic $defs last), and check the licence. Also documents what [[impl-fm-proxy-js]] corrects, expected test counts, Pi usage limits, the image token cost rule (3 + 16 prompt tokens per 168 px cell, at most 12 cells, so 19 to 195 per image regardless of content, format or file size), and structured-output dialect rules.
+Serves [[comp-upstream-audit|serves]]. Agent/maintainer source of truth for upstream fm serve behaviour on 27.0.1 (including the measured cyclic `$defs` hang, which stalls every inference request on the server until a restart), the fm version fingerprint table, release history, and the per-OS-update audit recipe: regenerate [[impl-docs-fm-reference-md]] with [[impl-tools-gen-fm-docs-py|flow]] and diff (dump and per-leaf --help both captured; grep DUMP/HELP MISMATCH and test flagged flags against the binary; on 27.0.1 --use-case and --guardrails are real on chat and available, count-tokens rejects --schema and --verbose and ignores --label, and schema object rejects --nested), run the layers in [[impl-tools-test-plan-md]] including [[impl-tools-deviation-probe-js]], re-check known walls by hand (cyclic $defs last), and check the licence. Also documents what [[impl-fm-proxy-js]] corrects, expected test counts, Pi usage limits, the image token cost rule (3 + 16 prompt tokens per 168 px cell, at most 12 cells, so 19 to 195 per image regardless of content, format or file size), structured-output dialect rules, and which recursive response_format schemas the proxy forwards (a $ref, array items without minItems, or anyOf [$ref, null] on a $defs property, with every cycle escaping through an optional property or such an array) and which it rejects with 400 cyclic_schema.

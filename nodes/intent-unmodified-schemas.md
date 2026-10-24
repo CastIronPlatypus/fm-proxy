@@ -14,9 +14,10 @@
   "node_type": "story",
   "status": "drafting",
   "stratum": "intent",
+  "succeeds": "intent-unmodified-schemas@v2",
   "uid": "n0029",
-  "version": 1
+  "version": 3
 }
 -->
 
-As an OpenAI-SDK client, I can send generator-emitted structured-output and tool schemas unmodified and get constrained output instead of a 400, and the server is protected from a cyclic $defs that would hang it. Delivered by [[resp-schema-translation]].
+As an OpenAI-SDK client, I can send generator-emitted structured-output and tool schemas unmodified and get constrained output instead of a 400. That includes the recursive schemas pydantic and zod emit for trees, linked lists and comment threads. A recursive shape fm serve has not been shown to handle, including a cycle with no optional or array escape, is rejected with a 400 that names the recursion path and how to fix it, so it never hangs the server. Delivered by [[resp-schema-translation]].
