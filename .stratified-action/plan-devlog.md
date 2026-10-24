@@ -91,3 +91,10 @@
 - [1792796852] **retire** — impl-fm-launch-sh@v1 -> v2; reason: launcher never exported its ports to the proxy, and its cleanup pkill-ed any fm serve on the port, including one it did not start; perturbed: []
 - [1792796861] **change-done** — s2
 - [1792796861] **change** — walk -> settle
+- [1792865407] **begin** — change
+- [1792865415] **comprehend** — modify=['comp-upstream-audit', 'impl-readme-md']; attach=[]; impact=10 node(s)
+- [1792865415] **set-changeplan** — 1 step(s)
+- [1792865415] **change** — plan -> walk
+- [1792865415] **retire** — impl-agents-md@v1 -> v2; reason: state the measured image token cost rule; perturbed: []
+- [1792865419] **change-done** — s1
+- [1792865419] **change** — walk -> settle

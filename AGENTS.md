@@ -223,7 +223,7 @@ release history says otherwise.
 | `$defs`, no dialect | `400` naming `x-order` |
 | Titled string schema | `400` unless it carries a non-empty `enum` |
 | `array<array<object>>` tool param | Accepted natively |
-| Vision | Real image understanding. A 256 px PNG cost 131 `prompt_tokens` on the RC; a 64 px solid PNG cost 83 on 27.0.1, so recheck the flat-cost claim below. |
+| Vision | Real image understanding. An image costs 3 + 16 per 168 px cell, at most 12 cells: 19 to 195 `prompt_tokens`. See "Vision" below. |
 | Private Cloud Compute | Removed from the binary in Beta 7. `system` is the only model. |
 | Cross-site headers | `403` if the request carries `Origin`, `Referer`, or `Sec-Fetch-*` |
 
@@ -361,22 +361,39 @@ of a travel poster it described the scene ("people surfing and walking on a sunn
 with palm trees and sailboats"), named the sun's colour, and confirmed someone was
 surfing. It miscounted 3 sailboats as 4 — ordinary counting weakness, not blindness.
 
-The token cost is flat, and that is the useful part:
+The token cost follows a grid, not the file. Measured on 27.0.1 `26A434` against raw
+`fm serve`, every point twice with identical results, and confirmed through the proxy:
 
-| Image | `system` |
-|---|---|
-| 699×420, 545 KB | 187 |
-| 699×1024, 1.3 MB | 187 |
-| 1696×2482, 7.5 MB | 187 |
+**An image costs 3 + 16 × cells prompt tokens.** A cell is a 168 px square.
 
-`system` charges a **flat** cost per image no matter the resolution or file size — 14×
-the pixels costs the same 187 tokens, so roughly 130 tokens for the image on top of a
-~57-token turn. It evidently downsamples to a fixed grid and emits a fixed-size
-embedding.
+1. `cols = ceil(w / 168)` and `rows = ceil(h / 168)`.
+2. If that grid exceeds 12 cells, the image is scaled to 12 × 168² px of area, keeping its
+   aspect, and the grid is recomputed with `floor`, at least 1 per side.
+3. The result is capped at 12 cells.
 
-Two practical consequences. Resizing before sending is pointless: it cannot save tokens
-and it only discards detail. And the fixed budget is why the model reads large text
-reliably but miscounts small repeated objects — there is only so much grid.
+| Image | Cells | Image tokens |
+|---|---|---|
+| up to 168×168 | 1 | 19 |
+| 169² to 336² | 2×2 | 67 |
+| 337² and larger, any square | 3×3 | 147 |
+| 699×420, 1920×1080, 699×1024, 1696×2482 | 4×2 or 2×4 | 131 |
+| 1024×256 | 6×1 | 99 |
+| 1024×768, 800×600 | 4×3 | 195 |
+| a long strip such as 4000×200 | 12 | 195 |
+
+So one image costs 19 to 195 tokens. Content, format and file size do not move it: solid
+colour, noise, text and a drawn scene cost the same at a given size, as do PNG and JPEG at
+any quality, from 185 B to 3.1 MB. Several images in one message add: two 512 px squares
+cost 294.
+
+Three practical consequences. Above about 340 px on the short side, resizing saves
+nothing, because the grid is already capped. Below that, a smaller image is cheaper: a
+168 px thumbnail costs 19 tokens against 147 for a large square. And readings hold up
+small: rendered invoice text was read exactly at 64 px and above, but at 16 and 32 px the
+model invented numbers instead of saying it could not read them.
+
+The rule, a predictor and the raw sweeps live in the `fm_native` repo: `surface/vision.md`,
+`tools/vision-rule.py`, `raw/vision/`.
 
 Unrelated bug: `fm count-tokens --image <path>` fails with
 `ModelManagerServices.ModelManagerError error 1001`, so image token costs have to be
@@ -384,7 +401,7 @@ read from `fm serve`'s `usage` instead of the CLI.
 
 Every feature works on the on-device model, but only if the whole request fits the
 4096-token window. Through the raw API that is easy: a plain turn frames to 57 tokens
-and a 1024px poster image to 195. Through an agent harness it is not. See "Context
+and an image adds at most 195. Through an agent harness it is not. See "Context
 budget" and "Running Pi against fm-proxy".
 
 **Proxy feature sweep on Beta 5 (through the proxy, 12 checks):** non-streaming chat,
