@@ -104,3 +104,10 @@
 - [1792865231] **change-amend** — 2 frozen + 1 re-authored
 - [1792865234] **change-done** — s3 — no change needed: v2 prose already describes the two-source diff
 - [1792865234] **change** — walk -> settle
+- [1792866932] **begin** — change
+- [1792868070] **comprehend** — modify=['comp-project-docs', 'comp-upstream-audit']; attach=[]; impact=12 node(s)
+- [1792868070] **set-changeplan** — 1 step(s)
+- [1792868071] **change** — plan -> walk
+- [1792868071] **retire** — impl-agents-md@v2 -> v3; reason: state the measured image token cost rule; perturbed: []
+- [1792868071] **change-done** — s1
+- [1792868071] **change** — walk -> settle
