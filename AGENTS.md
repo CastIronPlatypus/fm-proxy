@@ -8,7 +8,7 @@
 
 **`fm-proxy.js`** sits in front of Apple's `fm serve` and speaks the OpenAI Chat
 Completions dialect, so an ordinary OpenAI client works against the on-device model
-without code changes. It supports **Beta 7 and later, including the 27.0 RC**; code for
+without code changes. It supports **Beta 7 and later, including the 27.0 RC and 27.0.1**; code for
 earlier betas is removed.
 
 An earlier in-process Swift `fms` app was explored and dropped: it could not run
@@ -45,13 +45,13 @@ and `tools/ask-image.sh` is a manual probe.
 `fm --version` does **not** exist (errors "Unknown option"). To detect when Apple ships a
 new `fm`/FoundationModels build across macOS betas, fingerprint the binary:
 
-| What | How | Beta 2 value | Beta 3 value | Beta 4 value | Beta 5 value | Beta 6 value | Beta 7 value | Beta 8 value | 27.0 RC |
-|---|---|---|---|---|---|---|---|---|---|
-| fm source version | `otool -l /usr/bin/fm \| grep -A2 LC_SOURCE_VERSION` | `2.0.55.1.402` | `2.0.59` | `2.0.62.1.402` | `2.0.68.1.401` | `2.0.68.1.401` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` |
-| Framework version | `plutil -p /System/Library/Frameworks/FoundationModels.framework/Resources/Info.plist \| grep CFBundleVersion` | `2.0.55.1.402` | `2.0.59` | `2.0.62.1.402` | `2.0.68.1.401` | `2.0.68.1.401` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` |
-| Runtime version | `codesign -dvvv /usr/bin/fm` → `Runtime Version=` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` |
-| Rebuild date | `ls -la /usr/bin/fm` (mtime) | Jun 19 2026 | Jul 3 2026 | Jul 17 2026 | Aug 7 2026 | Aug 14 2026 | Aug 21 2026 | Aug 27 2026 | Sep 3 2026 |
-| macOS build | `sw_vers` → `BuildVersion` | `26A5368g` (27.0 Beta 2) | `26A5378j` (27.0 Beta 3) | `26A5388g` (27.0 Beta 4) | `26A5406e` (27.0 Beta 5) | `26A5416b` (27.0 Beta 6) | `26A5421a` (27.0 Beta 7) | `26A5425a` (27.0 Beta 8) | `26A428` (27.0 RC) |
+| What | How | Beta 2 value | Beta 3 value | Beta 4 value | Beta 5 value | Beta 6 value | Beta 7 value | Beta 8 value | 27.0 RC | 27.0.1 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| fm source version | `otool -l /usr/bin/fm \| grep -A2 LC_SOURCE_VERSION` | `2.0.55.1.402` | `2.0.59` | `2.0.62.1.402` | `2.0.68.1.401` | `2.0.68.1.401` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` |
+| Framework version | `plutil -p /System/Library/Frameworks/FoundationModels.framework/Resources/Info.plist \| grep CFBundleVersion` | `2.0.55.1.402` | `2.0.59` | `2.0.62.1.402` | `2.0.68.1.401` | `2.0.68.1.401` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` | `2.0.68.1.402` |
+| Runtime version | `codesign -dvvv /usr/bin/fm` → `Runtime Version=` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` | `27.0.0` |
+| Rebuild date | `ls -la /usr/bin/fm` (mtime) | Jun 19 2026 | Jul 3 2026 | Jul 17 2026 | Aug 7 2026 | Aug 14 2026 | Aug 21 2026 | Aug 27 2026 | Sep 3 2026 | Sep 24 2026 |
+| macOS build | `sw_vers` → `BuildVersion` | `26A5368g` (27.0 Beta 2) | `26A5378j` (27.0 Beta 3) | `26A5388g` (27.0 Beta 4) | `26A5406e` (27.0 Beta 5) | `26A5416b` (27.0 Beta 6) | `26A5421a` (27.0 Beta 7) | `26A5425a` (27.0 Beta 8) | `26A428` (27.0 RC) | `26A434` (27.0.1) |
 
 Audit recipe after any OS update:
 
@@ -64,6 +64,12 @@ Audit recipe after any OS update:
 
    The tree is a compile-time dump, so a diff here is authoritative: Beta 7's was all
    deletions, which is how PCC's removal was caught.
+
+   Caution: it is authoritative only for declared options. `fm schema object` takes its
+   properties as one passthrough argument, and the dump carries only that argument's
+   hand-written discussion text. On 27.0.1 the binary renamed `--nested` to `--object`
+   and rejects `--nested`, yet the dump still says `--nested`, so the diff was empty.
+   Read `fm schema object --help` by hand. Its usage example still says `--nested`.
 
    Commit the regenerated file as part of the audit, whether or not it changed. An empty
    diff is a result, and the commit records which build the tree belongs to.
@@ -189,11 +195,12 @@ The proxy is a drop-in OpenAI endpoint — point any OpenAI client at it and go:
   - `type: "server_error"` (`code: "internal_error"` / `"upstream_unreachable"`) —
     anything else, including the `502` when `fm serve` is down.
 
-### Upstream behaviour on the 27.0 RC
+### Upstream behaviour on 27.0.1
 
-Audited 2026-09-09 against a live `fm serve` on `system`, build `26A428`, `fm`
-2.0.68.1.402. Treat the RC as the final build. This table is the single statement of
-what `fm serve` does; do not re-derive it from the release history below.
+Audited 2026-10-24 against a live `fm serve` on `system`, build `26A434`, `fm`
+2.0.68.1.402. This table is the single statement of what `fm serve` does; do not
+re-derive it from the release history below. Every row matches the RC except where the
+release history says otherwise.
 
 | Behaviour | What `fm serve` does |
 |---|---|
@@ -204,19 +211,24 @@ what `fm serve` does; do not re-derive it from the release history below.
 | `stream` omitted | Returns `text/event-stream`, not one JSON object |
 | `n > 1` | `400 n=2 is not supported.` |
 | `parallel_tool_calls` | Accepted, then ignored |
-| `max_tokens` | Ignored. The proxy truncates. |
+| `max_tokens` | Ignored: a cap of 8 returned 611 tokens. The proxy maps it to `max_completion_tokens`. |
+| `max_completion_tokens` | Honoured roughly: cap 5 gave 10 tokens, 8 gave 16, 16 gave 22. `finish_reason` stays `stop`; the proxy rewrites it to `length`. |
+| `stop` | `400 stop sequences are not supported.` The proxy withholds it and applies it. |
+| `response_format` `json_object` | `400`, naming `json_schema`. The proxy types it `json_object_unsupported`. |
+| Remote `image_url` | `400`: fm serve does not fetch remote URLs. Only a base64 data URL works. |
 | Prompt framing | `hello world` is 57 `prompt_tokens` |
-| Context window | 4096 tokens. 4045 passes, ~4255 overflows. |
+| Context window | 4096 tokens. 4010 passes; a prompt about 150 tokens larger overflows. |
 | `$defs` + dialect, non-cyclic | `200` in one to three seconds |
 | `$defs` + dialect, **cyclic** | Hangs permanently. Restart `fm serve`. |
 | `$defs`, no dialect | `400` naming `x-order` |
 | Titled string schema | `400` unless it carries a non-empty `enum` |
 | `array<array<object>>` tool param | Accepted natively |
-| Vision | Real image understanding. A 256 px PNG costs 131 `prompt_tokens`. |
+| Vision | Real image understanding. A 256 px PNG cost 131 `prompt_tokens` on the RC; a 64 px solid PNG cost 83 on 27.0.1, so recheck the flat-cost claim below. |
 | Private Cloud Compute | Removed from the binary in Beta 7. `system` is the only model. |
 | Cross-site headers | `403` if the request carries `Origin`, `Referer`, or `Sec-Fetch-*` |
 
-The licence is `FM1 version 1.0`, unchanged since Beta 5. Read it with `fm license
+The licence is `FM1 version 1.0`, unchanged since Beta 5, agreed on this machine on
+2026-10-22. Read it with `fm license
 --show` and check it with `fm license --status`; both print without prompting, once a
 privileged user has accepted it. Acceptance survives an OS update.
 
@@ -294,10 +306,15 @@ dispatch schema wins.
   in about 20 to 30 minutes with no intervention. An experiment ruled out both the cyclic
   hang and an `fm serve` restart as causes. Wait before you investigate.
 - **After a restart, the first request takes about 25 seconds** while the model reloads.
+  On 27.0.1 the first request after a fresh start took 1.3 seconds.
+- **A tiny `max_completion_tokens` can trip the guardrail.** On 27.0.1, a benign "tell me
+  a long story" prompt aborted with the guardrail message 2 of 10 times at a cap of 8 and
+  0 of 10 at a cap of 40, direct to `fm serve`. The proxy reports it as
+  `content_filter`, which is correct. The sample is small.
 
 #### Expected test results
 
-145 unit tests pass. The wire baseline records 14 cases and 3 endpoints.
+145 unit tests pass. The wire baseline records 22 cases and 3 endpoints.
 `node tools/deviation-probe.js 1977` reports 11 of 11 handled. `tools/harness-check.sh`
 reports 6 passed and 1 failed; the failure is the `pi` case described in
 `tools/TEST_PLAN.md`.
@@ -331,9 +348,9 @@ authoritative for what is true now.
 | Beta 7 `26A5421a` | 2.0.68.1.402 | **PCC removed from the binary**, with `fm quota-usage`. Non-cyclic `$defs` fixed. `array<array<object>>` accepted. Titled strings began requiring an `enum`. Audit fixed two proxy hazards in `57f26d3`: a forwarded cyclic schema, and a retried terminal 400. |
 | Beta 8 `26A5425a` | 2.0.68.1.402 | Rebuilt binary, identical CLI surface. No behaviour change. Audit fixed a proxy bug: a capped stream emitted two `finish_reason` values. |
 | RC `26A428` | 2.0.68.1.402 | Rebuilt binary, identical CLI surface. The RC audit found the tool-call marker leak. A clean-room record shows Beta 7 leaked too. |
-| 27.0.1 `26A434` | 2.0.68.1.402 | Help tree byte-identical (per `fm_native`). `stop` now `400`s and `json_object` and remote image URLs `400`; the proxy already handles all three. `max_completion_tokens` is roughly honoured, with `finish_reason` left at `stop`. A second `fm serve` on a busy port prints its banner, then exits 1 `Address already in use`. That exposed a launcher bug, fixed here: `fm-launch.sh` killed any `fm serve` on its port, including one it had not started, and never passed its port flags to the proxy. |
+| 27.0.1 `26A434` | 2.0.68.1.402 | Rebuilt binary. Dump-help tree byte-identical, but `fm schema object` renamed `--nested` to `--object` (see the audit recipe). No `fm serve` behaviour change: `stop`, `json_object` and remote image URLs `400` as on the RC, and `max_completion_tokens` still overshoots and leaves `finish_reason` at `stop`. Markers leaked 6 of 10 direct and 8 of 10 through the proxy. A second `fm serve` on a busy port prints its banner, then exits 1 `Address already in use`. That exposed a launcher bug, fixed here: `fm-launch.sh` killed any `fm serve` on its port, including one it had not started, and never passed its port flags to the proxy. |
 
-Three builds now share `fm` 2.0.68.1.402 and produce a byte-identical help tree, so only
+Four builds now share `fm` 2.0.68.1.402 and produce a byte-identical help tree, so only
 the binary's mtime distinguishes them. The help tree does not show behaviour. Audit both layers
 after any OS update.
 

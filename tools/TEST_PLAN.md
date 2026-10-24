@@ -10,7 +10,7 @@ Three layers. Run them in order. Each catches what the layer above cannot.
 
 ## Layer 1 — unit and integration
 
-`node --test fm-proxy.test.js`. Expect **108 pass, 0 fail**.
+`node --test fm-proxy.test.js`. Expect **145 pass, 0 fail**.
 
 A skipped test means the `fm` CLI is unavailable. Check the licence with `fm license
 --status`, which prints without prompting. Run `sudo fm license` only if it reports no
@@ -20,7 +20,7 @@ agreement.
 
 The strongest check for "nothing changed". Model output is not repeatable, so this runs
 the proxy against a recording stub instead of the real engine, and records the exact
-bytes the proxy forwards for 14 fixed requests plus 3 endpoints.
+bytes the proxy forwards for 22 fixed requests plus 3 endpoints.
 
 ```bash
 export FM_BIN=/nonexistent   # see the caution below
