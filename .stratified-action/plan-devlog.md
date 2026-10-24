@@ -91,3 +91,16 @@
 - [1792796852] **retire** — impl-fm-launch-sh@v1 -> v2; reason: launcher never exported its ports to the proxy, and its cleanup pkill-ed any fm serve on the port, including one it did not start; perturbed: []
 - [1792796861] **change-done** — s2
 - [1792796861] **change** — walk -> settle
+- [1792865101] **begin** — change
+- [1792865106] **comprehend** — modify=['impl-docs-fm-reference-md', 'impl-tools-gen-fm-docs-py']; attach=[]; impact=6 node(s)
+- [1792865109] **change** — comprehend -> plan
+- [1792865115] **set-changeplan** — 3 step(s)
+- [1792865115] **change** — plan -> walk
+- [1792865201] **retire** — impl-tools-gen-fm-docs-py@v1 -> v2; reason: dump-help alone missed the 27.0.1 --nested to --object rename; capture leaf --help and flag disagreements; perturbed: []
+- [1792865219] **change-done** — s1
+- [1792865220] **retire** — impl-docs-fm-reference-md@v1 -> v2; reason: now also carries each leaf --help and DUMP/HELP MISMATCH notes; perturbed: []
+- [1792865220] **retire** — impl-agents-md@v1 -> v2; reason: audit recipe describes the two-source structure diff; perturbed: []
+- [1792865227] **change-done** — s2
+- [1792865231] **change-amend** — 2 frozen + 1 re-authored
+- [1792865234] **change-done** — s3 — no change needed: v2 prose already describes the two-source diff
+- [1792865234] **change** — walk -> settle

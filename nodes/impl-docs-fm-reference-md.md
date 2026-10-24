@@ -11,9 +11,10 @@
   "realized_fp": "1792787917:7746",
   "status": "drafting",
   "stratum": "implementation",
+  "succeeds": "impl-docs-fm-reference-md@v1",
   "uid": "n0005",
-  "version": 1
+  "version": 2
 }
 -->
 
-Serves [[comp-upstream-audit|serves]]. Generated, committed per build: the full fm command tree as per-command option tables, written by [[impl-tools-gen-fm-docs-py]] from fm --experimental-dump-help. Never hand-edited; it is the 'before' side of the structure diff in the audit recipe in [[impl-agents-md]].
+Serves [[comp-upstream-audit|serves]]. Generated, committed per build: the full fm command tree as per-command option tables, written by [[impl-tools-gen-fm-docs-py]] from fm --experimental-dump-help, plus each leaf command's ANSI-stripped --help text and a greppable DUMP/HELP MISMATCH note where the two disagree (27.0.1: --nested in the dump, --object in --help). Never hand-edited; it is the 'before' side of the structure diff in the audit recipe in [[impl-agents-md]].
