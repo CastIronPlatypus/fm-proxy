@@ -111,3 +111,12 @@
 - [1792868071] **retire** — impl-agents-md@v2 -> v3; reason: state the measured image token cost rule; perturbed: []
 - [1792868071] **change-done** — s1
 - [1792868071] **change** — walk -> settle
+- [1792868150] **begin** — change
+- [1792868163] **comprehend** — modify=['impl-agents-md']; attach=[]; impact=6 node(s)
+- [1792868163] **change** — comprehend -> plan
+- [1792868174] **set-changeplan** — 2 step(s)
+- [1792868174] **change** — plan -> walk
+- [1792868596] **change-done** — s1 — AGENTS.md node body must name the confirmed 27.0.1 cyclic hang; no other node changes
+- [1792868597] **retire** — impl-agents-md@v3 -> v4; reason: 27.0.1 measurement: a cyclic defs schema with no escape hangs every inference on fm serve; AGENTS.md now records it; perturbed: []
+- [1792868606] **change-done** — s2
+- [1792868607] **change** — walk -> settle

@@ -83,8 +83,9 @@ Audit recipe after any OS update:
    reverse also happens, so re-test the known walls separately. Run the three test
    layers in `tools/TEST_PLAN.md`, then re-check by hand:
    - tool calling — still broken upstream (`tool_calls` never populated)
-   - `$defs` in `response_format` — undecorated 400s; a **cyclic** one hangs `fm serve`
-     permanently, so test it last and restart the server afterwards
+   - `$defs` in `response_format` — undecorated 400s; a **cyclic** one with no escape
+     hangs every inference request on that `fm serve`, so test it last, on a server of
+     your own, and restart it afterwards
    - forced `tool_choice` — raw `fm serve` still answers 500 "unsupported generation
      guide". Through the proxy it must return a real `tool_call`: forced dispatch now
      depends on `response_format` and constrained decoding continuing to work, so if
@@ -103,8 +104,9 @@ Audit recipe after any OS update:
 Record the result as a new section, and fold the previous one into the release-history
 table.
 
-Warning: a cyclic `$defs` request hangs `fm serve` permanently. Run that test last, and
-restart `fm serve` afterwards.
+Warning: a cyclic `$defs` request with no escape hangs every inference request on that
+`fm serve` until it is restarted. Run that test last, on a port of your own, and restart
+`fm serve` afterwards.
 
 Caution: for the first hour after an OS update, do not trust a failure. The machine may
 still be settling its model assets, and `com.apple.SensitiveContentAnalysisML error 15`
@@ -225,7 +227,8 @@ release history says otherwise.
 | Prompt framing | `hello world` is 57 `prompt_tokens` |
 | Context window | 4096 tokens. 4010 passes; a prompt about 150 tokens larger overflows. |
 | `$defs` + dialect, non-cyclic | `200` in one to three seconds |
-| `$defs` + dialect, **cyclic** | Hangs permanently. Restart `fm serve`. |
+| `$defs` + dialect, **cyclic**, no escape | Hangs, and takes the whole server with it. See below. |
+| `$defs` + dialect, cyclic through an array | `200`. `Person.friends: array of Person` ends in an empty array. |
 | `$defs`, no dialect | `400` naming `x-order` |
 | Titled string schema | `400` unless it carries a non-empty `enum` |
 | `array<array<object>>` tool param | Accepted natively |
@@ -302,6 +305,27 @@ pieces, so a client that concatenates `function.arguments` across deltas gets va
 
 Caution: a forced tool call and a caller's own `response_format` cannot both hold. The
 dispatch schema wins.
+
+#### A cyclic `$defs` hangs the whole server
+
+Measured on 27.0.1 against a private `fm serve`. The schema was a `Node` whose required
+`child` is a `Node`, with every dialect key present. The evidence is in `fm_native`, under
+`raw/serve/cyclic_defs_26A434/`.
+
+- The cyclic request gets no reply. The client gave up at 120 seconds.
+- Every other inference request on that server hangs too. A plain control request sent
+  10 seconds in timed out at 60 seconds, and so did one sent after the cyclic client
+  had disconnected.
+- `GET /health` keeps answering `200` throughout, so it cannot detect the state.
+- `fm serve` itself sits at 0% CPU. The work is stuck in the system's
+  `TGOnDeviceInferenceProviderService`, which ran at about 99% CPU.
+- Restarting `fm serve` recovers it, but not at once. The first request after the restart
+  also hung for 120 seconds. The next one, about 2.5 minutes after the restart,
+  succeeded. Error 15 did not appear.
+
+A cycle with an escape is safe: `Person` with `friends: array of Person` returned `200` in
+about a second and left the server healthy. The proxy rejects every cycle with `cyclic_schema`,
+the safe shape included.
 
 #### Operational notes
 
@@ -416,18 +440,11 @@ streaming chat, streaming usage relay, `stream`-omitted → JSON, structured out
 `GET /v1/models`, `GET /health`, and fast non-retryable forced-`tool_choice` rejection
 (154 ms) all pass. Only tool calling fails, and that is upstream.
 
-> **Testing caution.** Once `fm serve` is poisoned (see `$defs` above), every later
-> request fails with `com.apple.SensitiveContentAnalysisML error 15`,
-> `LanguageModelError error -1`, or a hang — regardless of what you are testing.
-> Those errors are a property of the server's state, not a verdict about the feature
-> under test. Restart `fm serve` and re-run a control that is known to pass before you
-> trust any negative result. An early Beta 5 run wrongly concluded that object `title`
-> caused a hang; it passes on a clean server.
->
-> The error 15 part of that caution did not reproduce on the 27.0 RC. A deliberate hang
-> plus a restart returned a healthy server twice, and error 15 never followed. Either the
-> link was specific to Beta 5, or the Beta 5 run hit the same environmental fault that the
-> RC audit later traced to a settling machine. Treat error 15 as environmental first.
+> **Testing caution.** Once `fm serve` is poisoned by a cyclic `$defs` (see the behaviour
+> table), every later inference request hangs, whatever you are testing. A hang is then a
+> property of the server's state, not a verdict about the feature under test. Restart
+> `fm serve` and re-run a control that is known to pass before you trust any negative
+> result. Treat `com.apple.SensitiveContentAnalysisML error 15` as environmental first.
 
 ### Known limits
 
@@ -537,6 +554,6 @@ to injecting the dialect only when a schema cannot be inlined. This matters beca
 pydantic, zod-to-json-schema, and TypeBox all emit `$defs`/`$ref` for named types, so an
 ordinary client would otherwise get a `400`.
 
-Warning: a cyclic `$defs` has no finite inline form, and forwarding one hangs `fm serve`
-permanently. The proxy rejects it with `400` `cyclic_schema` before it opens an upstream
+Warning: a cyclic `$defs` has no finite inline form, and forwarding one with no escape
+hangs every inference request on `fm serve` until a restart. The proxy rejects it with `400` `cyclic_schema` before it opens an upstream
 connection.
